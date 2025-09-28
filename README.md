@@ -3,14 +3,15 @@
 
 <br/>
 
-## 진행 현황
+## 진행 현황 Progress status
 
-현재 전처리 및 데이터 처리를 진행중입니다.
+
+- 현재 전처리 및 데이터 처리를 진행중입니다.
 
 
 <br/>
 
 
-## 이용한 데이터 used data
+## 이용한 데이터 Used data
 - [염록소-a 데이터](https://oceandata.sci.gsfc.nasa.gov/l3/order/)
 - [stt 데이터](https://psl.noaa.gov/data/gridded/data.noaa.oisst.v2.highres.html)
