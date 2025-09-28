@@ -14,7 +14,7 @@ import scipy.ndimage as ndimage
 from datetime import date
 
 
-def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5, smoothPercentile=True, smoothPercentileWidth=31, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=False, coldSpells=False, alternateClimatology=False, Ly=False):
+def detect(t, temp, climatologyPeriod=[1983,2012], MHWPeriod=[1983,2012], pctile=90, windowHalfWidth=5, smoothPercentile=True, smoothPercentileWidth=31, minDuration=5, joinAcrossGaps=True, maxGap=2, maxPadLength=False, coldSpells=False, alternateClimatology=False):
     '''
 
     Applies the Hobday et al. (2016) marine heat wave definition to an input time
@@ -57,13 +57,19 @@ def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
         'intensity_cumulative_abs' are as above except as absolute magnitudes
         rather than relative to the seasonal climatology or threshold
 
+        'intensity_max_norm' and 'intensity_mean_norm' are as above except units are in
+        multiples of threshold exceedances, i.e., a value of 1.5 indicates the MHW
+        intensity (relative to the climatology) was 1.5 times the value of the threshold
+        (relative to climatology, i.e., threshold - climatology)
         'category' is an integer category system (1, 2, 3, 4) based on the maximum intensity
         in multiples of threshold exceedances, i.e., a value of 1 indicates the MHW
         intensity (relative to the climatology) was >=1 times the value of the threshold (but
         less than 2 times; relative to climatology, i.e., threshold - climatology).
-        Category types are defined as 1=moderate, 2=strong, 3=severe, 4=extreme. More details in
+### AMANDINE CORRECTION!!!! Category types are defined as 1=strong, 2=moderate, 3=severe, 4=extreme. More details in
+        Category types are defined as 1=moderate, 2=strong, 3=severe, 4=extreme. More details in   ### AMANDINE CORRECTION!!!! 
         Hobday et al. (in prep., Oceanography). Also supplied are the duration of each of these
         categories for each event.
+
 
         'n_events'             A scalar integer (not a list) indicating the total
                                number of detected MHW events
@@ -79,9 +85,7 @@ def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
     Options:
 
       climatologyPeriod      Period over which climatology is calculated, specified
-                             as list of start and end years. Default is to calculate
-                             over the full range of years in the supplied time series.
-                             Alternate periods suppled as a list e.g. [1983,2012].
+                             as list of start and end years (DEFAULT = [1983,2012])
       pctile                 Threshold percentile (%) for detection of extreme values
                              (DEFAULT = 90)
       windowHalfWidth        Width of window (one sided) about day-of-year used for
@@ -111,9 +115,6 @@ def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
                              [1D numpy array of length TClim] and (2) the second element of
                              the list is a temperature vector [1D numpy array of length TClim].
                              (DEFAULT = False)
-      Ly                     Specifies if the length of the year is < 365/366 days (e.g. a 
-                             360 day year from a climate model). This affects the calculation
-                             of the climatology. (DEFAULT = False)
 
     Notes:
 
@@ -173,9 +174,13 @@ def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
     mhw['intensity_mean_abs'] = [] # [deg C]
     mhw['intensity_var_abs'] = [] # [deg C]
     mhw['intensity_cumulative_abs'] = [] # [deg C]
+    mhw['intensity_max_norm'] = []
     mhw['category'] = []
+    mhw['intensity_mean_norm'] = []
     mhw['rate_onset'] = [] # [deg C / day]
     mhw['rate_decline'] = [] # [deg C / day]
+    mhw['intensity_time_series'] = []  # [deg C] AMANDINE: intensity for each day during events
+    mhw['t_time_series'] = []  # [deg C] AMANDINE : time for each day during events
 
     #
     # Time and dates vectors
@@ -209,11 +214,6 @@ def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
     # Constants (doy values for Feb-28 and Feb-29) for handling leap-years
     feb28 = 59
     feb29 = 60
-
-    # Set climatology period, if unset use full range of available data
-    if (climatologyPeriod[0] is None) or (climatologyPeriod[1] is None):
-        climatologyPeriod[0] = year[0]
-        climatologyPeriod[1] = year[-1]
 
     #
     # Calculate threshold and seasonal climatology (varying with day-of-year)
@@ -259,9 +259,16 @@ def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
     # Inialize arrays
     thresh_climYear = np.NaN*np.zeros(lenClimYear)
     seas_climYear = np.NaN*np.zeros(lenClimYear)
+    seas_climYear_std = np.NaN*np.zeros(lenClimYear)
+    seas_climYear_NB = np.NaN*np.zeros(lenClimYear)
     clim = {}
     clim['thresh'] = np.NaN*np.zeros(TClim)
     clim['seas'] = np.NaN*np.zeros(TClim)
+    clim['seas_climYear'] = np.NaN*np.zeros(lenClimYear)
+    clim['thresh_climYear'] = np.NaN*np.zeros(lenClimYear)
+    clim['seas_climYear_std'] = np.NaN*np.zeros(lenClimYear)
+    clim['seas_climYear_NB'] = np.NaN*np.zeros(lenClimYear)
+    
     # Loop over all day-of-year values, and calculate threshold and seasonal climatology across years
     for d in range(1,lenClimYear+1):
         # Special case for Feb 29
@@ -277,16 +284,24 @@ def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
             tt = np.append(tt, clim_start+tt0 + w)
         tt = tt[tt>=0] # Reject indices "before" the first element
         tt = tt[tt<TClim] # Reject indices "after" the last element
-        thresh_climYear[d-1] = np.nanpercentile(tempClim[tt.astype(int)], pctile)
-        seas_climYear[d-1] = np.nanmean(tempClim[tt.astype(int)])
+        if len(nonans(tempClim[tt.astype(int)]))>0: # Amandine
+            thresh_climYear[d-1] = np.percentile(nonans(tempClim[tt.astype(int)]), pctile)
+            seas_climYear[d-1] = np.mean(nonans(tempClim[tt.astype(int)]))
+            seas_climYear_std[d-1] = np.std(nonans(tempClim[tt.astype(int)]))
+            seas_climYear_NB[d-1] = len(nonans(tempClim[tt.astype(int)]))
+        else:
+            print('No data at all for day ' + str(d) + 'of the year!!!')
+            thresh_climYear[d-1] = thresh_climYear[d-2] 
+            seas_climYear[d-1] = seas_climYear[d-2]                
     # Special case for Feb 29
     thresh_climYear[feb29-1] = 0.5*thresh_climYear[feb29-2] + 0.5*thresh_climYear[feb29]
     seas_climYear[feb29-1] = 0.5*seas_climYear[feb29-2] + 0.5*seas_climYear[feb29]
+    seas_climYear_std[feb29-1] = 0.5*seas_climYear_std[feb29-2] + 0.5*seas_climYear_std[feb29]
 
     # Smooth if desired
     if smoothPercentile:
-        # If the length of year is < 365/366 (e.g. a 360 day year from a Climate Model)
-        if Ly:
+        # If the climatology contains NaNs, then assume it is a <365-day year and deal accordingly
+        if np.sum(np.isnan(seas_climYear)) + np.sum(np.isnan(thresh_climYear)):
             valid = ~np.isnan(thresh_climYear)
             thresh_climYear[valid] = runavg(thresh_climYear[valid], smoothPercentileWidth)
             valid = ~np.isnan(seas_climYear)
@@ -299,6 +314,10 @@ def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
     # Generate threshold for full time series
     clim['thresh'] = thresh_climYear[doy.astype(int)-1]
     clim['seas'] = seas_climYear[doy.astype(int)-1]
+    clim['seas_climYear'] = seas_climYear
+    clim['thresh_climYear'] = thresh_climYear
+    clim['seas_climYear_std'] = seas_climYear_std
+    clim['seas_climYear_NB'] = seas_climYear_NB
 
     # Save vector indicating which points in temp are missing values
     clim['missing'] = np.isnan(temp)
@@ -309,12 +328,14 @@ def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
     # Find MHWs as exceedances above the threshold
     #
 
+    # Amandine: To restict to MHWPeriod
+    BAD_MHWPeriod = (year < MHWPeriod[0]) | (year > MHWPeriod[1])        
     # Time series of "True" when threshold is exceeded, "False" otherwise
     exceed_bool = temp - clim['thresh']
     exceed_bool[exceed_bool<=0] = False
     exceed_bool[exceed_bool>0] = True
-    # Fix issue where missing temp vaues (nan) are counted as True
-    exceed_bool[np.isnan(exceed_bool)] = False
+    exceed_bool[BAD_MHWPeriod] = False  # Amandine
+
     # Find contiguous regions of exceed_bool = True
     events, n_events = ndimage.label(exceed_bool)
 
@@ -355,6 +376,7 @@ def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
         tt_end = np.where(t==mhw['time_end'][ev])[0][0]
         mhw['index_start'].append(tt_start)
         mhw['index_end'].append(tt_end)
+        t_mhw = t[tt_start:tt_end+1]   # AMANDINE
         temp_mhw = temp[tt_start:tt_end+1]
         thresh_mhw = clim['thresh'][tt_start:tt_end+1]
         seas_mhw = clim['seas'][tt_start:tt_end+1]
@@ -382,6 +404,10 @@ def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
         mhw['intensity_mean_abs'].append(mhw_abs.mean())
         mhw['intensity_var_abs'].append(np.sqrt(mhw_abs.var()))
         mhw['intensity_cumulative_abs'].append(mhw_abs.sum())
+        mhw['intensity_max_norm'].append(1. + mhw_relThreshNorm[tt_peak])
+        mhw['intensity_mean_norm'].append(1. + mhw_relThreshNorm.mean())
+        mhw['intensity_time_series'].append(mhw_relSeas)  # AMANDINE
+        mhw['t_time_series'].append(t_mhw)  # AMANDINE
         # Fix categories
         tt_peakCat = np.argmax(mhw_relThreshNorm)
         cats = np.floor(1. + mhw_relThreshNorm)
@@ -390,7 +416,6 @@ def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
         mhw['duration_strong'].append(np.sum(cats == 2.))
         mhw['duration_severe'].append(np.sum(cats == 3.))
         mhw['duration_extreme'].append(np.sum(cats >= 4.))
-        
         # Rates of onset and decline
         # Requires getting MHW strength at "start" and "end" of event (continuous: assume start/end half-day before/after first/last point)
         if tt_start > 0:
@@ -424,6 +449,8 @@ def detect(t, temp, climatologyPeriod=[None,None], pctile=90, windowHalfWidth=5,
             mhw['intensity_max_abs'][ev] = -1.*mhw['intensity_max_abs'][ev]
             mhw['intensity_mean_abs'][ev] = -1.*mhw['intensity_mean_abs'][ev]
             mhw['intensity_cumulative_abs'][ev] = -1.*mhw['intensity_cumulative_abs'][ev]
+            mhw['intensity_max_norm'][ev] = -1.*mhw['intensity_max_norm'][ev]
+            mhw['intensity_mean_norm'][ev] = -1.*mhw['intensity_mean_norm'][ev]
 
     return mhw, clim
 
@@ -469,6 +496,11 @@ def blockAverage(t, mhw, clim=None, blockLength=1, removeMissing=False, temp=Non
         'intensity_cumulative_abs' are as above except as absolute magnitudes
         rather than relative to the seasonal climatology or threshold
 
+        'intensity_max_norm' and 'intensity_mean_norm' are as above except units are in
+        multiples of threshold exceedances, i.e., a value of 1.5 indicates the MHW
+        intensity (relative to the climatology) was 1.5 times the value of the threshold
+        (relative to climatology, i.e., threshold - climatology)
+
     Options:
 
       blockLength            Size of block (in years) over which to calculate the
@@ -481,9 +513,6 @@ def blockAverage(t, mhw, clim=None, blockLength=1, removeMissing=False, temp=Non
                              as output by marineHeatWaves.detect (required if removeMissing = TRUE)
       temp                   Temperature time series. If included mhwBlock will output block
                              averages of mean, max, and min temperature (DEFAULT = NONE)
-
-                             If both clim and temp are provided, this will output annual counts
-                             of moderate, strong, severe, and extreme days.
 
     Notes:
 
@@ -518,14 +547,8 @@ def blockAverage(t, mhw, clim=None, blockLength=1, removeMissing=False, temp=Non
     # Temperature time series included?
     #
 
-    sw_temp = None
-    sw_cats = None
     if temp is not None:
         sw_temp = True
-        if clim is not None:
-            sw_cats = True
-        else:
-            sw_cats = False
     else:
         sw_temp = False
 
@@ -550,6 +573,8 @@ def blockAverage(t, mhw, clim=None, blockLength=1, removeMissing=False, temp=Non
     mhwBlock['intensity_mean_abs'] = np.zeros(nBlocks)
     mhwBlock['intensity_cumulative_abs'] = np.zeros(nBlocks)
     mhwBlock['intensity_var_abs'] = np.zeros(nBlocks)
+    mhwBlock['intensity_max_norm'] = np.zeros(nBlocks)
+    mhwBlock['intensity_mean_norm'] = np.zeros(nBlocks)
     mhwBlock['rate_onset'] = np.zeros(nBlocks)
     mhwBlock['rate_decline'] = np.zeros(nBlocks)
     mhwBlock['total_days'] = np.zeros(nBlocks)
@@ -560,15 +585,15 @@ def blockAverage(t, mhw, clim=None, blockLength=1, removeMissing=False, temp=Non
         mhwBlock['temp_min'] = np.zeros(nBlocks)
 
     # Calculate category days
-    if sw_cats:
-        mhwBlock['moderate_days'] = np.zeros(nBlocks)
-        mhwBlock['strong_days'] = np.zeros(nBlocks)
-        mhwBlock['severe_days'] = np.zeros(nBlocks)
-        mhwBlock['extreme_days'] = np.zeros(nBlocks)
-        cats = np.floor(1 + (temp - clim['thresh']) / (clim['thresh'] - clim['seas']))
-        mhwIndex = np.zeros(t.shape)
-        for ev in range(mhw['n_events']):
-            mhwIndex[mhw['index_start'][ev]:mhw['index_end'][ev]+1] = 1.
+#    if sw_cats:
+#        mhwBlock['moderate_days'] = np.zeros(nBlocks)
+#        mhwBlock['strong_days'] = np.zeros(nBlocks)
+#        mhwBlock['severe_days'] = np.zeros(nBlocks)
+#        mhwBlock['extreme_days'] = np.zeros(nBlocks)
+#        cats = np.floor(1 + (temp - clim['thresh']) / (clim['thresh'] - clim['seas']))
+#        mhwIndex = np.zeros(t.shape)
+#        for ev in range(mhw['n_events']):
+#            mhwIndex[mhw['index_start'][ev]:mhw['index_end'][ev]+1] = 1.
 
 
     # Start, end, and centre years for all blocks
@@ -599,8 +624,11 @@ def blockAverage(t, mhw, clim=None, blockLength=1, removeMissing=False, temp=Non
         mhwBlock['intensity_mean_abs'][iBlock] += mhw['intensity_mean_abs'][i]
         mhwBlock['intensity_cumulative_abs'][iBlock] += mhw['intensity_cumulative_abs'][i]
         mhwBlock['intensity_var_abs'][iBlock] += mhw['intensity_var_abs'][i]
+        mhwBlock['intensity_max_norm'][iBlock] += mhw['intensity_max_norm'][i]
+        mhwBlock['intensity_mean_norm'][iBlock] += mhw['intensity_mean_norm'][i]
         mhwBlock['rate_onset'][iBlock] += mhw['rate_onset'][i]
         mhwBlock['rate_decline'][iBlock] += mhw['rate_decline'][i]
+#        mhwBlock['total_days'][iBlock] += mhw['duration'][i]   # Corrected by E.O in Jan 2017
         if mhw['date_start'][i].year == mhw['date_end'][i].year: # MHW in single year
             mhwBlock['total_days'][iBlock] += mhw['duration'][i]
         else: # MHW spans multiple years
@@ -612,12 +640,12 @@ def blockAverage(t, mhw, clim=None, blockLength=1, removeMissing=False, temp=Non
         mhwBlock['total_icum'][iBlock] += mhw['intensity_cumulative'][i]
 
     # Calculation of category days
-    if sw_cats:
-        for i in range(int(nBlocks)):
-            mhwBlock['moderate_days'][i] = ((year >= mhwBlock['years_start'][i]) * (year <= mhwBlock['years_end'][i]) * mhwIndex * (cats == 1)).astype(int).sum()
-            mhwBlock['strong_days'][i] = ((year >= mhwBlock['years_start'][i]) * (year <= mhwBlock['years_end'][i]) * mhwIndex * (cats == 2)).astype(int).sum()
-            mhwBlock['severe_days'][i] = ((year >= mhwBlock['years_start'][i]) * (year <= mhwBlock['years_end'][i]) * mhwIndex * (cats == 3)).astype(int).sum()
-            mhwBlock['extreme_days'][i] = ((year >= mhwBlock['years_start'][i]) * (year <= mhwBlock['years_end'][i]) * mhwIndex * (cats >= 4)).astype(int).sum()
+#    if sw_cats:
+#        for i in range(int(nBlocks)):
+#            mhwBlock['moderate_days'][i] = ((year >= mhwBlock['years_start'][i]) * (year <= mhwBlock['years_end'][i]) * mhwIndex * (cats == 1)).astype(int).sum()
+#            mhwBlock['strong_days'][i] = ((year >= mhwBlock['years_start'][i]) * (year <= mhwBlock['years_end'][i]) * mhwIndex * (cats == 2)).astype(int).sum()
+#            mhwBlock['severe_days'][i] = ((year >= mhwBlock['years_start'][i]) * (year <= mhwBlock['years_end'][i]) * mhwIndex * (cats == 3)).astype(int).sum()
+#            mhwBlock['extreme_days'][i] = ((year >= mhwBlock['years_start'][i]) * (year <= mhwBlock['years_end'][i]) * mhwIndex * (cats >= 4)).astype(int).sum()
 
     # Calculate averages
     count = 1.*mhwBlock['count']
@@ -635,6 +663,8 @@ def blockAverage(t, mhw, clim=None, blockLength=1, removeMissing=False, temp=Non
     mhwBlock['intensity_mean_abs'] = mhwBlock['intensity_mean_abs'] / count
     mhwBlock['intensity_cumulative_abs'] = mhwBlock['intensity_cumulative_abs'] / count
     mhwBlock['intensity_var_abs'] = mhwBlock['intensity_var_abs'] / count
+    mhwBlock['intensity_max_norm'] = mhwBlock['intensity_max_norm'] / count
+    mhwBlock['intensity_mean_norm'] = mhwBlock['intensity_mean_norm'] / count
     mhwBlock['rate_onset'] = mhwBlock['rate_onset'] / count
     mhwBlock['rate_decline'] = mhwBlock['rate_decline'] / count
     # Replace empty years in intensity_max_max
@@ -671,14 +701,16 @@ def blockAverage(t, mhw, clim=None, blockLength=1, removeMissing=False, temp=Non
             mhwBlock['intensity_mean_abs'][iMissing] = np.nan
             mhwBlock['intensity_cumulative_abs'][iMissing] = np.nan
             mhwBlock['intensity_var_abs'][iMissing] = np.nan
+            mhwBlock['intensity_max_norm'][iMissing] = np.nan
+            mhwBlock['intensity_mean_norm'][iMissing] = np.nan
             mhwBlock['rate_onset'][iMissing] = np.nan
             mhwBlock['rate_decline'][iMissing] = np.nan
             mhwBlock['total_days'][iMissing] = np.nan
-            if sw_cats:
-                mhwBlock['moderate_days'][iMissing] = np.nan
-                mhwBlock['strong_days'][iMissing] = np.nan
-                mhwBlock['severe_days'][iMissing] = np.nan
-                mhwBlock['extreme_days'][iMissing] = np.nan
+#            if sw_cats:
+#                mhwBlock['moderate_days'][iMissing] = np.nan
+#                mhwBlock['strong_days'][iMissing] = np.nan
+#                mhwBlock['severe_days'][iMissing] = np.nan
+#                mhwBlock['extreme_days'][iMissing] = np.nan
             mhwBlock['total_icum'][iMissing] = np.nan
 
     return mhwBlock
@@ -725,6 +757,11 @@ def meanTrend(mhwBlock, alpha=0.05):
         'intensity_cumulative_abs' are as above except as absolute magnitudes
         rather than relative to the seasonal climatology or threshold
 
+        'intensity_max_norm' and 'intensity_mean_norm' are as above except units are in
+        multiples of threshold exceedances, i.e., a value of 1.5 indicates the MHW
+        intensity (relative to the climatology) was 1.5 times the value of the threshold
+        (relative to climatology, i.e., threshold - climatology)
+ 
     Notes:
 
       This calculation performs a multiple linear regression of the form
@@ -822,6 +859,11 @@ def rank(t, mhw):
         'intensity_max_abs', 'intensity_mean_abs', 'intensity_var_abs', and
         'intensity_cumulative_abs' are as above except as absolute magnitudes
         rather than relative to the seasonal climatology or threshold
+
+        'intensity_max_norm' and 'intensity_mean_norm' are as above except units are in
+        multiples of threshold exceedances, i.e., a value of 1.5 indicates the MHW
+        intensity (relative to the climatology) was 1.5 times the value of the threshold
+        (relative to climatology, i.e., threshold - climatology)
 
     Notes:
 
