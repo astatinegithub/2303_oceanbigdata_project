@@ -13,5 +13,5 @@
 
 
 ## 이용한 데이터 Used data
-- [염록소-a 데이터](https://oceandata.sci.gsfc.nasa.gov/l3/order/)
 - [stt 데이터](https://psl.noaa.gov/data/gridded/data.noaa.oisst.v2.highres.html)
+- 천리안 위성 2호와 천리안 위성 1호의 엽록소데이터를 일별 평균 데이터로 변환해서 사용함
