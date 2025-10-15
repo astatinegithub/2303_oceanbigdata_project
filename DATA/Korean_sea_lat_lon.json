@@ -1,0 +1,159 @@
+{
+    "동현": {
+        "lat_range": [
+            32.125,
+            34.125
+        ],
+        "lon_range": [
+            124.125,
+            128.125
+        ],
+        "description": "선기&동현이가 하고 싶어하는 지역"
+    },
+    "남해": {
+        "lat_range": [
+            33.0,
+            35.47
+        ],
+        "lon_range": [
+            124.0,
+            130.5
+        ],
+        "description": "남해 - 북위 35°28' 이남의 한반도 남쪽 해역",
+        "boundary_north": "35°28'N (울산 태화강 하구 ~ 일본 이즈모시)",
+        "boundary_west": "진도 서쪽 끝 ~ 제주도 차귀도 직선",
+        "boundary_south": "제주도 우도 ~ 일본 후쿠에섬 직선"
+    },
+    "동해": {
+        "lat_range": [
+            35.47,
+            38.5
+        ],
+        "lon_range": [
+            129.0,
+            132.0
+        ],
+        "description": "동해 - 북위 35°28' 이북의 한반도 동쪽 해역",
+        "boundary_south": "35°28'N (울산 태화강 하구 ~ 일본 이즈모시)",
+        "boundary_north": "두만강 하구",
+        "boundary_west": "한반도 동해안선"
+    },
+    "서해": {
+        "lat_range": [
+            33.5,
+            38.0
+        ],
+        "lon_range": [
+            124.0,
+            126.5
+        ],
+        "description": "서해(황해) - 한반도 서쪽 해역",
+        "boundary_east": "진도 서쪽 끝 ~ 제주도 차귀도 직선 이북",
+        "boundary_north": "압록강 하구",
+        "official_name": "Yellow Sea (국제 공식 명칭)"
+    },
+    "한반도": {
+        "lat_range": [
+            33.0,
+            38.5
+        ],
+        "lon_range": [
+            124.0,
+            132.0
+        ],
+        "description": "한반도 전체 주변 해역",
+        "total_area": "약 47만 km²"
+    },
+    "한반도확장": {
+        "lat_range": [
+            33.0,
+            43.0
+        ],
+        "lon_range": [
+            122.0,
+            134.0
+        ]
+    },
+    "남해주변": {
+        "lat_range": [
+            34.0,
+            35.47
+        ],
+        "lon_range": [
+            125.0,
+            129.5
+        ],
+        "description": "남해안 연안 해역"
+    },
+    "제주주변": {
+        "lat_range": [
+            33.0,
+            34.0
+        ],
+        "lon_range": [
+            125.0,
+            127.5
+        ],
+        "description": "제주도 주변 해역"
+    },
+    "동해북부": {
+        "lat_range": [
+            37.0,
+            38.5
+        ],
+        "lon_range": [
+            129.0,
+            132.0
+        ],
+        "description": "동해 북부 해역"
+    },
+    "동해남부": {
+        "lat_range": [
+            35.47,
+            37.0
+        ],
+        "lon_range": [
+            129.0,
+            132.0
+        ],
+        "description": "동해 남부 해역"
+    },
+    "서해북부": {
+        "lat_range": [
+            36.5,
+            38.0
+        ],
+        "lon_range": [
+            124.0,
+            126.5
+        ],
+        "description": "서해 북부 해역"
+    },
+    "서해남부": {
+        "lat_range": [
+            33.5,
+            36.5
+        ],
+        "lon_range": [
+            124.0,
+            126.5
+        ],
+        "description": "서해 남부 해역"
+    },
+    "boundaries": {
+        "east_south_boundary": 35.47,
+        "west_south_boundary_lat": 33.27,
+        "marado_lat": 33.11,
+        "dokdo_lat": 37.24,
+        "dokdo_lon": 131.87
+    },
+    "metadata": {
+        "source": "해양수산부 1997년 공식 기준",
+        "reference": "국립수산진흥원 1979년 한국해양편람",
+        "coordinate_system": "WGS84 (위도/경도)",
+        "unit": "degrees",
+        "created_date": "2025-10-04",
+        "note": "해양열파 분석을 위한 한반도 주변 해역 구분",
+        "format": "lat_range=[min, max], lon_range=[min, max]"
+    }
+}
